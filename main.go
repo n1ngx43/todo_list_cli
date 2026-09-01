@@ -5,68 +5,22 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
-	"time"
 )
 
-func parseTimeString(tStr string) (time.Time, error) {
-	n := time.Now()
-	year := n.Year()
-	month := n.Month()
-	day := n.Day()
-	location := n.Location()
-
-	t, err := time.ParseInLocation("15:04", tStr, location)
-	if err != nil {
-		return time.Time{}, err
-	}
-	hour := t.Hour()
-	minute := t.Minute()
-	second := t.Second()
-	nanosecond := t.Nanosecond()
-
-	fullTime := time.Date(year, month, day, hour, minute, second, nanosecond, location)
-
-	return fullTime, nil
+var priorityScore map[string]int = map[string]int{
+	"High":   3,
+	"Medium": 2,
+	"Low":    1,
 }
 
-func convertDateFormat(dStr string) (string, error) {
-	d, err := time.Parse("02/01/2006", dStr)
-	if err != nil {
-		return "", err
-	}
-
-	return d.Format(time.DateOnly), nil
-}
-
-func writeFile(taskList []Task) error {
-	n := time.Now()
-	filePath := fmt.Sprintf("data/%s.json", n.Format(time.DateOnly))
-
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "    ")
-	err = encoder.Encode(taskList)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func readFile(filePath string) ([]Task, error) {
-	var taskList []Task
-
-	file, err := os.Open(filePath)
+func readFile() ([]Task, error) {
+	file, err := os.Open("./data/2026-08-16.json")
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
+	var taskList []Task
 	err = json.NewDecoder(file).Decode(&taskList)
 	if err != nil {
 		return nil, err
@@ -76,57 +30,82 @@ func readFile(filePath string) ([]Task, error) {
 }
 
 func displayTaskList(taskList []Task) {
-	w := tabwriter.NewWriter(os.Stdout, 4, 0, 4, ' ', 0)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(w, "ID\tName\tStatus\tPriority\tStart time\tEnd time")
-	fmt.Fprintln(w, "----\t------------\t------------\t------------\t------------\t------------")
-
-	if len(taskList) == 0 {
-		fmt.Fprintln(w, "Task list is empty!")
-		w.Flush()
-		return
-	}
-
+	fmt.Fprintf(w, "|\t%s\t|\t%s\t|\t%s\t|\t%s\t|\t%s\t|\t%s\t|\n", "ID", "Name", "Status", "Priority", "Start Time", "End Time")
 	for _, task := range taskList {
-		startTimeStr := fmt.Sprintf("%s - %s", task.StartTime.Format("15:04"), task.StartTime.Format("02/01/2006"))
-		endTimeStr := fmt.Sprintf("%s - %s", task.EndTime.Format("15:04"), task.EndTime.Format("02/01/2006"))
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", task.ID, task.Name, task.Status, task.Priority, startTimeStr, endTimeStr)
+		fmt.Fprintf(w, "|\t%s\t|\t%s\t|\t%s\t|\t%s\t|\t%s\t|\t%s\t|\n", task.ID, task.Name, task.Status, task.Priority, task.StartTime, task.EndTime)
 	}
 
 	w.Flush()
 }
 
-func displayTaskListByDate(dStr string) error {
-	fileName, err := convertDateFormat(dStr)
-	if err != nil {
-		return err
+func sortPriority(taskList []Task) []Task {
+	for i := 0; i < len(taskList)-1; i++ {
+		max := i
+		for j := i + 1; j < len(taskList); j++ {
+			if priorityScore[taskList[max].Priority] <= priorityScore[taskList[j].Priority] {
+				max = j
+			}
+		}
+		if max != i {
+			taskList[i], taskList[max] = taskList[max], taskList[i]
+		}
 	}
-
-	filePath := fmt.Sprintf("data/%s.json", fileName)
-
-	taskList, err := readFile(filePath)
-	if err != nil {
-		return err
-	}
-
-	displayTaskList(taskList)
-	return nil
+	return taskList
 }
 
-func displayTaskListByToday() error {
-	n := time.Now()
-	today := n.Format(time.DateOnly)
-
-	filePath := fmt.Sprintf("data/%s.json",today)
-
-	taskList, err := readFile(filePath)
-	if err != nil {
-		return err
+func sortStartDate(taskList []Task) []Task {
+	for i := 0; i < len(taskList)-1; i++ {
+		min := i
+		for j := i + 1; j < len(taskList); j++ {
+			if taskList[min].StartTime.After(taskList[j].StartTime) {
+				min = j
+			}
+		}
+		if min != i {
+			taskList[i], taskList[min] = taskList[min], taskList[i]
+		}
 	}
+	return taskList
+}
 
-	displayTaskList(taskList)
-	return nil
+func sortPriorityAndStartDate(taskList []Task) []Task {
+	for i := 0; i < len(taskList) - 1; i++ {
+		best := i;
+		for j := i + 1; j < len(taskList); j++ {
+			scoreBest := priorityScore[taskList[best].Priority];
+			scoreJ := priorityScore[taskList[j].Priority];
+			if scoreBest < scoreJ {
+				best = j;
+			} else if scoreBest == scoreJ {
+				if taskList[best].StartTime.After(taskList[j].StartTime) {
+					best = j;
+				}
+			}
+		}
+		if best != i {
+			taskList[i], taskList[best] = taskList[best], taskList[i];
+		}
+	}
+	return taskList
+}
+
+func displayTaskListByToday(taskList []Task) {
+	taskList = sortPriorityAndStartDate(taskList);
+	displayTaskList(taskList);
+}
+
+func displayTaskListByDate(taskList []Task) {
+	taskList = sortPriorityAndStartDate(taskList);
+	displayTaskList(taskList);
 }
 
 func main() {
+	taskList, err := readFile();
+	if err != nil {
+		fmt.Println(err);
+	}
+
+	displayTaskListByToday(taskList);
 }
