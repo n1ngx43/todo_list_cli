@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// -- UTIL FUNCTIONS ----------
 var priorityScore map[string]int = map[string]int{
 	"High":   3,
 	"Medium": 2,
@@ -36,6 +37,34 @@ func readFile(fileName string) ([]Task, error) {
 	return taskList, nil
 }
 
+func writeFile(taskList []Task) error {
+	fileName := time.Now().Format(time.DateOnly)
+	file, err := os.OpenFile(filepath.Join("data", fileName+".json"), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	err = json.NewEncoder(file).Encode(taskList)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func timeToString(timeTime time.Time) string {
+	return timeTime.Format(time.RFC3339)
+}
+
+func stringToTime(timeString string) (time.Time, error) {
+	now := time.Now()
+	parsedTime, err := time.Parse(time.TimeOnly, timeString)
+	if err != nil {
+		return parsedTime, err
+	}
+	date := time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(), 0, now.Location())
+	return date, nil
+}
+
 func formatDate(dateString string) (string, error) {
 	// Format date from dd/mm/yyyy to yyyy/mm/dd
 	dateTime, err := time.Parse("02/01/2006", dateString)
@@ -44,6 +73,12 @@ func formatDate(dateString string) (string, error) {
 	}
 	return dateTime.Format(time.DateOnly), nil
 }
+
+func generateID(taskList []Task) string {
+	return fmt.Sprintf("t%d", len(taskList)+1)
+}
+
+// -- END ----------
 
 func sortPriorityAndStartDate(taskList []Task) []Task {
 	// Sort task list priority and start time
@@ -116,12 +151,175 @@ func displayTaskListByDate(dateString string) {
 	displayTaskList(taskList)
 }
 
+func inputFromKeyboard(task *Task) (string, string, string, string, string) {
+	reader := bufio.NewReader(os.Stdin)
+	var name, status, priority, startTime, endTime string
+
+	if task == nil || *task == (Task{}) {
+		fmt.Print(">. Enter name: ")
+		name, _ = reader.ReadString('\n')
+		name = strings.TrimSpace(name)
+
+		statusList := []string{"To-do", "Inprogress", "Done"}
+		for {
+			fmt.Print(">. Enter status: ")
+			status, _ = reader.ReadString('\n')
+			status = strings.TrimSpace(status)
+			isValid := false
+			for _, s := range statusList {
+				if strings.EqualFold(s, status) {
+					status = s
+					isValid = true
+					break
+				}
+			}
+			if isValid {
+				break
+			}
+		}
+
+		priorityList := []string{"High", "Medium", "Low"}
+		for {
+			fmt.Print(">. Enter priority: ")
+			priority, _ = reader.ReadString('\n')
+			priority = strings.TrimSpace(priority)
+			isValid := false
+			for _, p := range priorityList {
+				if strings.EqualFold(p, priority) {
+					priority = p
+					isValid = true
+					break
+				}
+			}
+			if isValid {
+				break
+			}
+		}
+
+		for {
+			fmt.Print(">. Enter start time: ")
+			startTime, _ = reader.ReadString('\n')
+			startTime = strings.TrimSpace(startTime)
+			_, err := time.Parse("15:04:05", startTime)
+			if err == nil {
+				break
+			}
+		}
+
+		for {
+			fmt.Print(">. Enter end time: ")
+			endTime, _ = reader.ReadString('\n')
+			endTime = strings.TrimSpace(endTime)
+			_, err := time.Parse("15:04:05", endTime)
+			if err == nil {
+				break
+			}
+		}
+	} else {
+		fmt.Printf(">. Enter name [%s] (hit enter to skip): ", task.Name)
+		name, _ = reader.ReadString('\n')
+		name = strings.TrimSpace(name)
+
+		statusList := []string{"To-do", "Inprogress", "Done"}
+		for {
+			fmt.Printf(">. Enter status [%s] (hit enter to skip): ", task.Status)
+			status, _ = reader.ReadString('\n')
+			status = strings.TrimSpace(status)
+			isValid := false
+			for _, s := range statusList {
+				if strings.EqualFold(s, status) {
+					status = s
+					isValid = true
+					break
+
+				}
+			}
+			if isValid {
+				break
+			}
+		}
+
+		priorityList := []string{"High", "Medium", "Low"}
+		for {
+			fmt.Printf(">. Enter priority [%s] (hit enter to skip): ", task.Priority)
+			priority, _ = reader.ReadString('\n')
+			priority = strings.TrimSpace(priority)
+			isValid := false
+			for _, p := range priorityList {
+				if strings.EqualFold(p, priority) {
+					priority = p
+					isValid = true
+					break
+				}
+			}
+			if isValid {
+				break
+			}
+		}
+
+		for {
+			fmt.Printf(">. Enter start time [%s] (hit enter to skip): ", task.StartTime)
+			startTime, _ = reader.ReadString('\n')
+			startTime = strings.TrimSpace(startTime)
+			_, err := time.Parse("15:04:05", startTime)
+			if err == nil {
+				break
+			}
+		}
+
+		for {
+			fmt.Printf(">. Enter end time [%s] (hit enter to skip): ", task.EndTime)
+			endTime, _ = reader.ReadString('\n')
+			endTime = strings.TrimSpace(endTime)
+			_, err := time.Parse("15:04:05", endTime)
+			if err == nil {
+				break
+			}
+		}
+	}
+
+	return name, status, priority, startTime, endTime
+}
+
+func addTask() error {
+	fileName := time.Now().Format(time.DateOnly)
+	taskList, err := readFile(fileName)
+	if err != nil {
+		taskList = []Task{}
+	}
+	id := generateID(taskList)
+	name, status, priority, startTimeStr, endTimeStr := inputFromKeyboard(nil)
+	startTime, err := stringToTime(startTimeStr)
+	if err != nil {
+		return err
+	}
+	endTime, err := stringToTime(endTimeStr)
+	if err != nil {
+		return err
+	}
+	newTassk := Task{
+		ID: id,
+		Name: name,
+		Status: status,
+		Priority: priority,
+		StartTime: startTime,
+		EndTime: endTime,
+	}
+	taskList = append(taskList, newTassk)
+	err = writeFile(taskList)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func controller() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Println("-- TODO LIST CLI (1.0.0) ----------")
 		fmt.Println("1. Task by today")
 		fmt.Println("2. Task by date")
+		fmt.Println("3. Add task")
 		fmt.Println("0. Exit")
 		fmt.Print(">. Input your option: ")
 		option, err := reader.ReadString('\n')
@@ -147,13 +345,17 @@ func controller() {
 				continue
 			}
 			displayTaskListByDate(dateString)
+		case "3":
+			err := addTask()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to add task!")
+			}
 		case "0":
 			fmt.Println("See you soon!")
 			return
 		default:
 			fmt.Fprintln(os.Stderr, "Invalid option!")
 		}
-
 	}
 }
 
