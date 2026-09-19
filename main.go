@@ -66,7 +66,7 @@ func stringToTime(timeString string) (time.Time, error) {
 }
 
 func formatDate(dateString string) (string, error) {
-	// Format date from dd/mm/yyyy to yyyy/mm/dd
+	// Format date from dd/mm/yyyy to yyyy-mm-dd
 	dateTime, err := time.Parse("02/01/2006", dateString)
 	if err != nil {
 		return "", err
@@ -219,12 +219,18 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 		fmt.Printf(">. Enter name [%s] (hit enter to skip): ", task.Name)
 		name, _ = reader.ReadString('\n')
 		name = strings.TrimSpace(name)
+		if name == "" {
+			name = task.Name
+		}
 
 		statusList := []string{"To-do", "Inprogress", "Done"}
 		for {
 			fmt.Printf(">. Enter status [%s] (hit enter to skip): ", task.Status)
 			status, _ = reader.ReadString('\n')
 			status = strings.TrimSpace(status)
+			if status == "" {
+				status = task.Status
+			}
 			isValid := false
 			for _, s := range statusList {
 				if strings.EqualFold(s, status) {
@@ -244,6 +250,9 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 			fmt.Printf(">. Enter priority [%s] (hit enter to skip): ", task.Priority)
 			priority, _ = reader.ReadString('\n')
 			priority = strings.TrimSpace(priority)
+			if priority == "" {
+				priority = task.Priority
+			}
 			isValid := false
 			for _, p := range priorityList {
 				if strings.EqualFold(p, priority) {
@@ -261,6 +270,9 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 			fmt.Printf(">. Enter start time [%s] (hit enter to skip): ", task.StartTime)
 			startTime, _ = reader.ReadString('\n')
 			startTime = strings.TrimSpace(startTime)
+			if startTime == "" {
+				startTime = task.StartTime.Format(time.TimeOnly)
+			}
 			_, err := time.Parse("15:04:05", startTime)
 			if err == nil {
 				break
@@ -271,11 +283,17 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 			fmt.Printf(">. Enter end time [%s] (hit enter to skip): ", task.EndTime)
 			endTime, _ = reader.ReadString('\n')
 			endTime = strings.TrimSpace(endTime)
+			if endTime == "" {
+				endTime = task.EndTime.Format(time.TimeOnly)
+			}
 			_, err := time.Parse("15:04:05", endTime)
 			if err == nil {
 				break
 			}
 		}
+	}
+	if endTime == "" {
+		endTime = task.EndTime.String()
 	}
 
 	return name, status, priority, startTime, endTime
@@ -298,12 +316,12 @@ func addTask() error {
 		return err
 	}
 	newTassk := Task{
-		ID: id,
-		Name: name,
-		Status: status,
-		Priority: priority,
+		ID:        id,
+		Name:      name,
+		Status:    status,
+		Priority:  priority,
 		StartTime: startTime,
-		EndTime: endTime,
+		EndTime:   endTime,
 	}
 	taskList = append(taskList, newTassk)
 	err = writeFile(taskList)
@@ -313,6 +331,19 @@ func addTask() error {
 	return nil
 }
 
+// func editTask(dateString string) error {
+// 	fileName, err := formatDate(dateString)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	taskList, err := readFile(fileName)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	return nil
+// }
+
 func controller() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -320,6 +351,7 @@ func controller() {
 		fmt.Println("1. Task by today")
 		fmt.Println("2. Task by date")
 		fmt.Println("3. Add task")
+		fmt.Println("4. Edit task")
 		fmt.Println("0. Exit")
 		fmt.Print(">. Input your option: ")
 		option, err := reader.ReadString('\n')
@@ -350,6 +382,8 @@ func controller() {
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Failed to add task!")
 			}
+		case "4":
+
 		case "0":
 			fmt.Println("See you soon!")
 			return
@@ -360,5 +394,19 @@ func controller() {
 }
 
 func main() {
-	controller()
+	// controller()
+
+	start := time.Date(2026, time.September, 18, 15, 0, 0, 0, time.Local)
+	end := time.Date(2026, time.September, 18, 16, 0, 0, 0, time.Local)
+
+	task := Task{
+		ID:        "t3",
+		Name:      "Đi chơi",
+		Status:    "To-do",
+		Priority:  "High",
+		StartTime: start,
+		EndTime:   end,
+	}
+
+	fmt.Print(inputFromKeyboard(&task))
 }
