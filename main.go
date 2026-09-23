@@ -2,83 +2,28 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
 )
 
-// -- UTIL FUNCTIONS ----------
 var priorityScore map[string]int = map[string]int{
 	"High":   3,
 	"Medium": 2,
 	"Low":    1,
 }
 
-func readFile(fileName string) ([]Task, error) {
-	// Read file
-	file, err := os.Open(filepath.Join("data", fileName+".json"))
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	var taskList []Task
-	err = json.NewDecoder(file).Decode(&taskList)
-	if err != nil {
-		if err == io.EOF {
-			return []Task{}, nil
+func searchTask(taskList []Task, id string) *Task {
+	for i, t := range taskList {
+		if strings.EqualFold(id, t.ID) {
+			return &taskList[i]
 		}
-		return nil, err
-	}
-	return taskList, nil
-}
-
-func writeFile(taskList []Task) error {
-	fileName := time.Now().Format(time.DateOnly)
-	file, err := os.OpenFile(filepath.Join("data", fileName+".json"), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	err = json.NewEncoder(file).Encode(taskList)
-	if err != nil {
-		return err
 	}
 	return nil
 }
-
-func timeToString(timeTime time.Time) string {
-	return timeTime.Format(time.RFC3339)
-}
-
-func stringToTime(timeString string) (time.Time, error) {
-	now := time.Now()
-	parsedTime, err := time.Parse(time.TimeOnly, timeString)
-	if err != nil {
-		return parsedTime, err
-	}
-	date := time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(), 0, now.Location())
-	return date, nil
-}
-
-func formatDate(dateString string) (string, error) {
-	// Format date from dd/mm/yyyy to yyyy-mm-dd
-	dateTime, err := time.Parse("02/01/2006", dateString)
-	if err != nil {
-		return "", err
-	}
-	return dateTime.Format(time.DateOnly), nil
-}
-
-func generateID(taskList []Task) string {
-	return fmt.Sprintf("t%d", len(taskList)+1)
-}
-
-// -- END ----------
 
 func sortPriorityAndStartDate(taskList []Task) []Task {
 	// Sort task list priority and start time
@@ -127,7 +72,7 @@ func displayTaskListByToday() {
 		return
 	}
 	taskList = sortPriorityAndStartDate(taskList)
-	fmt.Printf("Task List (%s)\n", dateString)
+	fmt.Printf("-- Task List (%s) ----------\n", dateString)
 	displayTaskList(taskList)
 }
 
@@ -139,7 +84,7 @@ func displayTaskListByDate(dateString string) {
 	}
 	taskList, err := readFile(fileName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't read file! !\nError: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Can't read file!\nError: %s\n", err)
 		return
 	}
 	if len(taskList) == 0 {
@@ -147,7 +92,7 @@ func displayTaskListByDate(dateString string) {
 		return
 	}
 	taskList = sortPriorityAndStartDate(taskList)
-	fmt.Printf("Task List (%s)\n", dateString)
+	fmt.Printf("-- Task List (%s) ----------\n", dateString)
 	displayTaskList(taskList)
 }
 
@@ -315,6 +260,9 @@ func addTask() error {
 	if err != nil {
 		return err
 	}
+	if startTime.After(endTime) {
+		return errors.New("start time cannot be after end time")
+	}
 	newTassk := Task{
 		ID:        id,
 		Name:      name,
@@ -331,18 +279,43 @@ func addTask() error {
 	return nil
 }
 
-// func editTask(dateString string) error {
-// 	fileName, err := formatDate(dateString)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	taskList, err := readFile(fileName)
-// 	if err != nil {
-// 		return err
-// 	}
+func editTask(dateString string, id string) error {
+	fileName, err := formatDate(dateString)
+	if err != nil {
+		return err
+	}
+	taskList, err := readFile(fileName)
+	if err != nil {
+		return err
+	}
+	foundedTask := searchTask(taskList, id)
+	if foundedTask == nil {
+		return err
+	}
+	name, status, priority, startTimeStr, endTimeStr := inputFromKeyboard(foundedTask)
+	startTime, err := stringToTime(startTimeStr)
+	if err != nil {
+		return err
+	}
+	endTime, err := stringToTime(endTimeStr)
+	if err != nil {
+		return err
+	}
+	if startTime.Before(endTime) {
+		return err
+	}
+	foundedTask.Name = name
+	foundedTask.Status = status
+	foundedTask.Priority = priority
+	foundedTask.StartTime = startTime
+	foundedTask.EndTime = endTime
 
-// 	return nil
-// }
+	err = writeFile(taskList)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func controller() {
 	reader := bufio.NewReader(os.Stdin)
@@ -356,7 +329,7 @@ func controller() {
 		fmt.Print(">. Input your option: ")
 		option, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Failed to read input!")
+			fmt.Fprintf(os.Stderr, "Failed to read input!\nError: %s\n", err)
 			continue
 		}
 		option = strings.TrimSpace(option)
@@ -368,45 +341,51 @@ func controller() {
 			fmt.Print(">. Input date: ")
 			dateString, err := reader.ReadString('\n')
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to read input!")
+				fmt.Fprintf(os.Stderr, "Failed to read input!\nError: %s\n", err)
 				continue
 			}
 			dateString = strings.TrimSpace(dateString)
 			if dateString == "" {
-				fmt.Fprintln(os.Stderr, "Date was empty!")
+				fmt.Println("Date was empty!")
 				continue
 			}
 			displayTaskListByDate(dateString)
 		case "3":
 			err := addTask()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to add task!")
+				fmt.Fprintf(os.Stderr, "Failed to add task!\nError: %s\n", err)
 			}
 		case "4":
-
+			fmt.Print(">. Input date: ")
+			dateString, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to read input!\nError: %s\n", err)
+				continue
+			}
+			dateString = strings.TrimSpace(dateString)
+			if dateString == "" {
+				fmt.Println("Date was empty!")
+				continue
+			}
+			displayTaskListByDate(dateString)
+			fmt.Print(">. Input task id to edit: ")
+			id, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Invalid ID\nError: %s\n", err)
+			}
+			err = editTask(dateString, id)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to edit task!\nError: %s\n", err)
+			}
 		case "0":
 			fmt.Println("See you soon!")
 			return
 		default:
-			fmt.Fprintln(os.Stderr, "Invalid option!")
+			fmt.Println("Invalid option!")
 		}
 	}
 }
 
 func main() {
-	// controller()
-
-	start := time.Date(2026, time.September, 18, 15, 0, 0, 0, time.Local)
-	end := time.Date(2026, time.September, 18, 16, 0, 0, 0, time.Local)
-
-	task := Task{
-		ID:        "t3",
-		Name:      "Đi chơi",
-		Status:    "To-do",
-		Priority:  "High",
-		StartTime: start,
-		EndTime:   end,
-	}
-
-	fmt.Print(inputFromKeyboard(&task))
+	controller()
 }
