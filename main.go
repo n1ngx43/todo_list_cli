@@ -2,83 +2,28 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
 )
 
-// -- UTIL FUNCTIONS ----------
 var priorityScore map[string]int = map[string]int{
 	"High":   3,
 	"Medium": 2,
 	"Low":    1,
 }
 
-func readFile(fileName string) ([]Task, error) {
-	// Read file
-	file, err := os.Open(filepath.Join("data", fileName+".json"))
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	var taskList []Task
-	err = json.NewDecoder(file).Decode(&taskList)
-	if err != nil {
-		if err == io.EOF {
-			return []Task{}, nil
+func searchTask(taskList []Task, id string) *Task {
+	for i, t := range taskList {
+		if strings.EqualFold(id, t.ID) {
+			return &taskList[i]
 		}
-		return nil, err
-	}
-	return taskList, nil
-}
-
-func writeFile(taskList []Task) error {
-	fileName := time.Now().Format(time.DateOnly)
-	file, err := os.OpenFile(filepath.Join("data", fileName+".json"), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	err = json.NewEncoder(file).Encode(taskList)
-	if err != nil {
-		return err
 	}
 	return nil
 }
-
-func timeToString(timeTime time.Time) string {
-	return timeTime.Format(time.RFC3339)
-}
-
-func stringToTime(timeString string) (time.Time, error) {
-	now := time.Now()
-	parsedTime, err := time.Parse(time.TimeOnly, timeString)
-	if err != nil {
-		return parsedTime, err
-	}
-	date := time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(), 0, now.Location())
-	return date, nil
-}
-
-func formatDate(dateString string) (string, error) {
-	// Format date from dd/mm/yyyy to yyyy/mm/dd
-	dateTime, err := time.Parse("02/01/2006", dateString)
-	if err != nil {
-		return "", err
-	}
-	return dateTime.Format(time.DateOnly), nil
-}
-
-func generateID(taskList []Task) string {
-	return fmt.Sprintf("t%d", len(taskList)+1)
-}
-
-// -- END ----------
 
 func sortPriorityAndStartDate(taskList []Task) []Task {
 	// Sort task list priority and start time
@@ -127,19 +72,15 @@ func displayTaskListByToday() {
 		return
 	}
 	taskList = sortPriorityAndStartDate(taskList)
-	fmt.Printf("Task List (%s)\n", dateString)
+	fmt.Printf("-- Task List (%s) ----------\n", dateString)
 	displayTaskList(taskList)
 }
 
 func displayTaskListByDate(dateString string) {
-	fileName, err := formatDate(dateString)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid format date!\nError: %s\n", err)
-		return
-	}
+	fileName, _ := formatDate(dateString)
 	taskList, err := readFile(fileName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't read file! !\nError: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Can't read file!\nError: %s\n", err)
 		return
 	}
 	if len(taskList) == 0 {
@@ -147,7 +88,7 @@ func displayTaskListByDate(dateString string) {
 		return
 	}
 	taskList = sortPriorityAndStartDate(taskList)
-	fmt.Printf("Task List (%s)\n", dateString)
+	fmt.Printf("-- Task List (%s) ----------\n", dateString)
 	displayTaskList(taskList)
 }
 
@@ -219,12 +160,18 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 		fmt.Printf(">. Enter name [%s] (hit enter to skip): ", task.Name)
 		name, _ = reader.ReadString('\n')
 		name = strings.TrimSpace(name)
+		if name == "" {
+			name = task.Name
+		}
 
 		statusList := []string{"To-do", "Inprogress", "Done"}
 		for {
 			fmt.Printf(">. Enter status [%s] (hit enter to skip): ", task.Status)
 			status, _ = reader.ReadString('\n')
 			status = strings.TrimSpace(status)
+			if status == "" {
+				status = task.Status
+			}
 			isValid := false
 			for _, s := range statusList {
 				if strings.EqualFold(s, status) {
@@ -244,6 +191,9 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 			fmt.Printf(">. Enter priority [%s] (hit enter to skip): ", task.Priority)
 			priority, _ = reader.ReadString('\n')
 			priority = strings.TrimSpace(priority)
+			if priority == "" {
+				priority = task.Priority
+			}
 			isValid := false
 			for _, p := range priorityList {
 				if strings.EqualFold(p, priority) {
@@ -261,6 +211,9 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 			fmt.Printf(">. Enter start time [%s] (hit enter to skip): ", task.StartTime)
 			startTime, _ = reader.ReadString('\n')
 			startTime = strings.TrimSpace(startTime)
+			if startTime == "" {
+				startTime = task.StartTime.Format(time.TimeOnly)
+			}
 			_, err := time.Parse("15:04:05", startTime)
 			if err == nil {
 				break
@@ -271,11 +224,17 @@ func inputFromKeyboard(task *Task) (string, string, string, string, string) {
 			fmt.Printf(">. Enter end time [%s] (hit enter to skip): ", task.EndTime)
 			endTime, _ = reader.ReadString('\n')
 			endTime = strings.TrimSpace(endTime)
+			if endTime == "" {
+				endTime = task.EndTime.Format(time.TimeOnly)
+			}
 			_, err := time.Parse("15:04:05", endTime)
 			if err == nil {
 				break
 			}
 		}
+	}
+	if endTime == "" {
+		endTime = task.EndTime.String()
 	}
 
 	return name, status, priority, startTime, endTime
@@ -289,24 +248,67 @@ func addTask() error {
 	}
 	id := generateID(taskList)
 	name, status, priority, startTimeStr, endTimeStr := inputFromKeyboard(nil)
-	startTime, err := stringToTime(startTimeStr)
+	startTime, err := stringToTimeToday(startTimeStr)
 	if err != nil {
 		return err
 	}
-	endTime, err := stringToTime(endTimeStr)
+	endTime, err := stringToTimeToday(endTimeStr)
 	if err != nil {
 		return err
+	}
+	if startTime.After(endTime) {
+		return errors.New("start time cannot be after end time")
 	}
 	newTassk := Task{
-		ID: id,
-		Name: name,
-		Status: status,
-		Priority: priority,
+		ID:        id,
+		Name:      name,
+		Status:    status,
+		Priority:  priority,
 		StartTime: startTime,
-		EndTime: endTime,
+		EndTime:   endTime,
 	}
 	taskList = append(taskList, newTassk)
-	err = writeFile(taskList)
+	err = writeFile(taskList, fileName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func editTask(dateString string, id string) error {
+	fileName, err := formatDate(dateString)
+	if err != nil {
+		return err
+	}
+	taskList, err := readFile(fileName)
+	if err != nil {
+		return err
+	}
+	foundedTask := searchTask(taskList, id)
+	if foundedTask == nil {
+		 return errors.New("task not found")
+	}
+
+	name, status, priority, startTimeStr, endTimeStr := inputFromKeyboard(foundedTask)
+	startTime, err := stringToTimeWithDate(startTimeStr, foundedTask.StartTime)
+	if err != nil {
+		return err
+	}
+	endTime, err := stringToTimeWithDate(endTimeStr, foundedTask.EndTime)
+	if err != nil {
+		return err
+	}
+	if startTime.After(endTime) {
+		return errors.New("start time cannot be after end time")
+	}
+
+	foundedTask.Name = name
+	foundedTask.Status = status
+	foundedTask.Priority = priority
+	foundedTask.StartTime = startTime
+	foundedTask.EndTime = endTime
+
+	err = writeFile(taskList, fileName)
 	if err != nil {
 		return err
 	}
@@ -320,11 +322,12 @@ func controller() {
 		fmt.Println("1. Task by today")
 		fmt.Println("2. Task by date")
 		fmt.Println("3. Add task")
+		fmt.Println("4. Edit task")
 		fmt.Println("0. Exit")
 		fmt.Print(">. Input your option: ")
 		option, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Failed to read input!")
+			fmt.Fprintf(os.Stderr, "Failed to read input!\nError: %s\n", err)
 			continue
 		}
 		option = strings.TrimSpace(option)
@@ -333,28 +336,83 @@ func controller() {
 		case "1":
 			displayTaskListByToday()
 		case "2":
-			fmt.Print(">. Input date: ")
-			dateString, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to read input!")
-				continue
-			}
-			dateString = strings.TrimSpace(dateString)
-			if dateString == "" {
-				fmt.Fprintln(os.Stderr, "Date was empty!")
-				continue
+			var dateString string
+			for {
+				isValid := true
+				fmt.Print(">. Input date: ")
+				dateString, err = reader.ReadString('\n')
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Failed to read input!\nError: %s\n", err)
+				}
+				dateString = strings.TrimSpace(dateString)
+				if dateString == "" {
+					isValid = false
+					fmt.Println("Date was empty!")
+				}
+				if isValid {
+					break
+				}
 			}
 			displayTaskListByDate(dateString)
 		case "3":
 			err := addTask()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to add task!")
+				fmt.Fprintf(os.Stderr, "Failed to add task!\nError: %s\n", err)
+			}
+		case "4":
+			var dateString string
+			for {
+				isValid := true
+				fmt.Print(">. Input date: ")
+				dateString, err = reader.ReadString('\n')
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Failed to read input!\nError: %s\n", err)
+				}
+				dateString = strings.TrimSpace(dateString)
+				_, err := formatDate(dateString)
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Invalid format date!\nError: %s\n", err)
+				}
+				if isValid {
+					break
+				}
+			}
+			displayTaskListByDate(dateString)
+			fileName, _ := formatDate(dateString)
+			taskList, err := readFile(fileName)
+			if err != nil || len(taskList) == 0 {
+				continue
+			}
+			var id string
+			for {
+				isValid := true
+				fmt.Print(">. Input task id to edit: ")
+				id, err = reader.ReadString('\n')
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Invalid ID\nError: %s\n", err)
+				}
+				id = strings.TrimSpace(id)
+				if searchTask(taskList, id) == nil {
+					isValid = false
+					fmt.Printf("Task ID '%s' not found! Please try again.\n", id)
+				}
+				if isValid {
+					break
+				}
+			}
+			err = editTask(dateString, id)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to edit task!\nError: %s\n", err)
 			}
 		case "0":
 			fmt.Println("See you soon!")
 			return
 		default:
-			fmt.Fprintln(os.Stderr, "Invalid option!")
+			fmt.Println("Invalid option!")
 		}
 	}
 }
