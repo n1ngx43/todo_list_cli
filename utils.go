@@ -27,8 +27,7 @@ func readFile(fileName string) ([]Task, error) {
 	return taskList, nil
 }
 
-func writeFile(taskList []Task) error {
-	fileName := time.Now().Format(time.DateOnly)
+func writeFile(taskList []Task, fileName string) error {
 	file, err := os.OpenFile(filepath.Join("data", fileName+".json"), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
 	if err != nil {
 		return err
@@ -45,14 +44,17 @@ func timeToString(timeTime time.Time) string {
 	return timeTime.Format(time.RFC3339)
 }
 
-func stringToTime(timeString string) (time.Time, error) {
-	now := time.Now()
+func stringToTimeWithDate(timeString string, targetDate time.Time) (time.Time, error) {
 	parsedTime, err := time.Parse(time.TimeOnly, timeString)
 	if err != nil {
 		return parsedTime, err
 	}
-	date := time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(), 0, now.Location())
+	date := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(), 0, targetDate.Location())
 	return date, nil
+}
+
+func stringToTimeToday(timeString string) (time.Time, error) {
+	return stringToTimeWithDate(timeString, time.Now())
 }
 
 func formatDate(dateString string) (string, error) {
