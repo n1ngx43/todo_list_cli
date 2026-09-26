@@ -286,7 +286,7 @@ func editTask(dateString string, id string) error {
 	}
 	foundedTask := searchTask(taskList, id)
 	if foundedTask == nil {
-		 return errors.New("task not found")
+		return errors.New("task not found")
 	}
 
 	name, status, priority, startTimeStr, endTimeStr := inputFromKeyboard(foundedTask)
@@ -315,6 +315,21 @@ func editTask(dateString string, id string) error {
 	return nil
 }
 
+func updateStatusTask(status string, id string) error {
+	fileName := time.Now().Format(time.DateOnly)
+	taskList, err := readFile(fileName)
+	if err != nil {
+		return err
+	}
+	foundedTask := searchTask(taskList, id)
+	foundedTask.Status = status
+	err = writeFile(taskList, fileName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func controller() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -323,6 +338,7 @@ func controller() {
 		fmt.Println("2. Task by date")
 		fmt.Println("3. Add task")
 		fmt.Println("4. Edit task")
+		fmt.Println("5. Update status for today task")
 		fmt.Println("0. Exit")
 		fmt.Print(">. Input your option: ")
 		option, err := reader.ReadString('\n')
@@ -407,6 +423,59 @@ func controller() {
 			err = editTask(dateString, id)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to edit task!\nError: %s\n", err)
+			}
+		case "5":
+			displayTaskListByToday()
+			fileName := time.Now().Format(time.DateOnly)
+			taskList, err := readFile(fileName)
+			if err != nil || len(taskList) == 0 {
+				continue
+			}
+			var id string
+			for {
+				isValid := true
+				fmt.Print(">. Input task id to edit: ")
+				id, err = reader.ReadString('\n')
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Invalid ID\nError: %s\n", err)
+				}
+				id = strings.TrimSpace(id)
+				if searchTask(taskList, id) == nil {
+					isValid = false
+					fmt.Printf("Task ID '%s' not found! Please try again.\n", id)
+				}
+				if isValid {
+					break
+				}
+			}
+			statusList := []string{"To-do", "Inprogress", "Done"}
+			var status string
+			for {
+				isValid := false
+				fmt.Print(">. Enter status: ")
+				status, err = reader.ReadString('\n')
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Invalid Status!\nError: %s\n", err)
+				}
+				status = strings.TrimSpace(status)
+
+				for _, s := range statusList {
+					if strings.EqualFold(s, status) {
+						status = s
+						isValid = true
+						break
+					}
+				}
+				if isValid {
+					break
+				}
+				fmt.Println("Invalid Status!\nPlease enter To-do, Inprogress, or Done.")
+			}
+			err = updateStatusTask(status, id)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to update status!\nError: %s\n", err)
 			}
 		case "0":
 			fmt.Println("See you soon!")
