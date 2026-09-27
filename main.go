@@ -25,6 +25,15 @@ func searchTask(taskList []Task, id string) *Task {
 	return nil
 }
 
+func searchIndexTask(taskList []Task, id string) int {
+	for i, t := range taskList {
+		if strings.EqualFold(id, t.ID) {
+			return i
+		}
+	}
+	return -1
+}
+
 func sortPriorityAndStartDate(taskList []Task) []Task {
 	// Sort task list priority and start time
 	for i := 0; i < len(taskList)-1; i++ {
@@ -330,6 +339,28 @@ func updateStatusTask(status string, id string) error {
 	return nil
 }
 
+func deleteTask(dateString string, id string) error {
+	fileName, err := formatDate(dateString)
+	if err != nil {
+		return err
+	}
+	taskList, err := readFile(fileName)
+	if err != nil {
+		return err
+	}
+	foundedTaskIndex := searchIndexTask(taskList, id)
+	if foundedTaskIndex == -1 {
+		return errors.New("task not found")
+	}
+
+	taskList = append(taskList[:foundedTaskIndex], taskList[foundedTaskIndex+1:]...)
+	err = writeFile(taskList, fileName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func controller() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -339,6 +370,7 @@ func controller() {
 		fmt.Println("3. Add task")
 		fmt.Println("4. Edit task")
 		fmt.Println("5. Update status for today task")
+		fmt.Println("6. Delete task")
 		fmt.Println("0. Exit")
 		fmt.Print(">. Input your option: ")
 		option, err := reader.ReadString('\n')
@@ -476,6 +508,54 @@ func controller() {
 			err = updateStatusTask(status, id)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to update status!\nError: %s\n", err)
+			}
+		case "6":
+			var dateString string
+			for {
+				isValid := true
+				fmt.Print(">. Input date: ")
+				dateString, err = reader.ReadString('\n')
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Failed to read input!\nError: %s\n", err)
+				}
+				dateString = strings.TrimSpace(dateString)
+				_, err := formatDate(dateString)
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Invalid format date!\nError: %s\n", err)
+				}
+				if isValid {
+					break
+				}
+			}
+			displayTaskListByDate(dateString)
+			fileName, _ := formatDate(dateString)
+			taskList, err := readFile(fileName)
+			if err != nil || len(taskList) == 0 {
+				continue
+			}
+			var id string
+			for {
+				isValid := true
+				fmt.Print(">. Input task id to edit: ")
+				id, err = reader.ReadString('\n')
+				if err != nil {
+					isValid = false
+					fmt.Fprintf(os.Stderr, "Invalid ID\nError: %s\n", err)
+				}
+				id = strings.TrimSpace(id)
+				if searchTask(taskList, id) == nil {
+					isValid = false
+					fmt.Printf("Task ID '%s' not found! Please try again.\n", id)
+				}
+				if isValid {
+					break
+				}
+			}
+			err = deleteTask(dateString, id)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to edit task!\nError: %s\n", err)
 			}
 		case "0":
 			fmt.Println("See you soon!")
