@@ -446,7 +446,7 @@ func controller() {
 				id = strings.TrimSpace(id)
 				if searchTask(taskList, id) == nil {
 					isValid = false
-					fmt.Printf("Task ID '%s' not found! Please try again.\n", id)
+					fmt.Printf("Task ID '%s' not found! Please try again\n", id)
 				}
 				if isValid {
 					break
@@ -475,7 +475,7 @@ func controller() {
 				id = strings.TrimSpace(id)
 				if searchTask(taskList, id) == nil {
 					isValid = false
-					fmt.Printf("Task ID '%s' not found! Please try again.\n", id)
+					fmt.Printf("Task ID '%s' not found! Please try again\n", id)
 				}
 				if isValid {
 					break
@@ -503,7 +503,7 @@ func controller() {
 				if isValid {
 					break
 				}
-				fmt.Println("Invalid Status!\nPlease enter To-do, Inprogress, or Done.")
+				fmt.Println("Invalid Status!\nPlease enter To-do, Inprogress, or Done")
 			}
 			err = updateStatusTask(status, id)
 			if err != nil {
@@ -547,7 +547,7 @@ func controller() {
 				id = strings.TrimSpace(id)
 				if searchTask(taskList, id) == nil {
 					isValid = false
-					fmt.Printf("Task ID '%s' not found! Please try again.\n", id)
+					fmt.Printf("Task ID '%s' not found! Please try again\n", id)
 				}
 				if isValid {
 					break
@@ -567,5 +567,9 @@ func controller() {
 }
 
 func main() {
+	_ = carryOverYesterdayTasks()
+
+	startMidnightWatcher()
+
 	controller()
 }
